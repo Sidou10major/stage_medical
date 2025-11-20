@@ -16,7 +16,7 @@ router.get('/students/:id', doctorController.getStudentDetails);
 
 // Evaluations
 router.get('/evaluations', doctorController.getEvaluations);
-router.get('/evaluations/create/:applicationId', doctorController.createEvaluation);
-router.post('/evaluations/:id/submit', doctorController.submitEvaluation);
+router.post('/evaluations/:applicationId', doctorController.createEvaluation);
+router.patch('/evaluations/:id/submit', doctorController.submitEvaluation);
 
 module.exports = router;

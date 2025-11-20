@@ -12,8 +12,9 @@ router.use(restrictTo('student'));
 router.get('/dashboard', studentController.getDashboard);
 
 // Profile
-router.get('/profile', studentController.getProfile);
-router.post('/profile', upload.single('document'), studentController.updateProfile);
+router.route('/profile')
+  .get(studentController.getProfile)
+  .patch(upload.single('document'), studentController.updateProfile);
 
 // Internships
 router.get('/internships', studentController.getInternships);
@@ -22,10 +23,9 @@ router.post('/internships/:id/apply', studentController.applyToInternship);
 
 // Applications
 router.get('/applications', studentController.getApplications);
-router.post('/applications/:id/cancel', studentController.cancelApplication);
+router.patch('/applications/:id/cancel', studentController.cancelApplication);
 
 // Evaluations
 router.get('/evaluations', studentController.getEvaluations);
-router.get('/evaluations/:id/certificate', studentController.downloadCertificate);
 
 module.exports = router;

@@ -11,19 +11,22 @@ router.use(restrictTo('dean'));
 router.get('/dashboard', deanController.getDashboard);
 
 // User Management
-router.get('/users', deanController.getUsers);
-router.get('/users/create', deanController.createUserForm);
-router.post('/users', deanController.createUser);
-router.post('/users/:id/toggle-status', deanController.toggleUserStatus);
-router.post('/users/:id/reset-password', deanController.resetPassword);
+router.route('/users')
+  .get(deanController.getUsers)
+  .post(deanController.createUser);
+
+router.patch('/users/:id/toggle-status', deanController.toggleUserStatus);
+router.patch('/users/:id/reset-password', deanController.resetPassword);
 
 // Establishments Management
-router.get('/establishments', deanController.getEstablishments);
-router.post('/establishments', deanController.createEstablishment);
+router.route('/establishments')
+  .get(deanController.getEstablishments)
+  .post(deanController.createEstablishment);
 
 // Services Management
-router.get('/services', deanController.getServices);
-router.post('/services', deanController.createService);
+router.route('/services')
+  .get(deanController.getServices)
+  .post(deanController.createService);
 
 // Statistics and Reports
 router.get('/statistics', deanController.getStatistics);

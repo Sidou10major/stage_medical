@@ -14,18 +14,22 @@ const signToken = (id) => {
 const createSendToken = (user, statusCode, res) => {
   const token = signToken(user._id);
   
-  const cookieOptions = {
-    expires: new Date(Date.now() + 90 * 24 * 60 * 60 * 1000), // 90 days
-    httpOnly: true,
-    secure: process.env.NODE_ENV === 'production'
-  };
-
-  res.cookie('jwt', token, cookieOptions);
-
   // Remove password from output
   user.password = undefined;
 
-  return token;
+  res.status(statusCode).json({
+    status: 'success',
+    token,
+    data: {
+      user: {
+        id: user._id,
+        email: user.email,
+        role: user.role,
+        isActive: user.isActive,
+        mustChangePassword: user.mustChangePassword
+      }
+    }
+  });
 };
 
 exports.login = async (req, res) => {
@@ -37,95 +41,69 @@ exports.login = async (req, res) => {
       const student = await Student.findOne({ matricule: matricule.toUpperCase() }).populate('user');
       
       if (!student || !student.user || !(await student.user.correctPassword(password))) {
-        return res.status(401).render('auth/login', { 
-          error: 'Matricule ou mot de passe incorrect',
-          layout: false
+        return res.status(401).json({
+          status: 'error',
+          message: 'Matricule ou mot de passe incorrect'
         });
       }
       
       if (!student.user.isActive) {
-        return res.status(401).render('auth/login', { 
-          error: 'Votre compte est désactivé. Contactez l\'administration.',
-          layout: false
+        return res.status(401).json({
+          status: 'error',
+          message: 'Votre compte est désactivé. Contactez l\'administration.'
         });
       }
 
-      createSendToken(student.user, 200, res);
       await student.user.updateLastLogin();
-      
-      return res.redirect('/student/dashboard');
+      createSendToken(student.user, 200, res);
+      return;
     }
 
     // Other users login with email
     const user = await User.findOne({ email: email.toLowerCase() });
     
     if (!user || !(await user.correctPassword(password))) {
-      return res.status(401).render('auth/login', { 
-        error: 'Email ou mot de passe incorrect',
-        layout: false
+      return res.status(401).json({
+        status: 'error',
+        message: 'Email ou mot de passe incorrect'
       });
     }
 
     if (!user.isActive) {
-      return res.status(401).render('auth/login', { 
-        error: 'Votre compte est désactivé. Contactez l\'administration.',
-        layout: false
+      return res.status(401).json({
+        status: 'error',
+        message: 'Votre compte est désactivé. Contactez l\'administration.'
       });
     }
 
-    createSendToken(user, 200, res);
     await user.updateLastLogin();
+    createSendToken(user, 200, res);
 
-    // Redirect based on role
-    switch(user.role) {
-      case 'student':
-        res.redirect('/student/dashboard');
-        break;
-      case 'doctor':
-        res.redirect('/doctor/dashboard');
-        break;
-      case 'service_chief':
-        res.redirect('/service-chief/dashboard');
-        break;
-      case 'dean':
-        res.redirect('/dean/dashboard');
-        break;
-      default:
-        res.redirect('/');
-    }
   } catch (error) {
     console.error('Login error:', error);
-    res.status(500).render('auth/login', { 
-      error: 'Erreur de connexion. Veuillez réessayer.',
-      layout: false
+    res.status(500).json({
+      status: 'error',
+      message: 'Erreur de connexion. Veuillez réessayer.'
     });
   }
 };
 
 exports.logout = (req, res) => {
-  res.cookie('jwt', 'loggedout', {
-    expires: new Date(Date.now() + 10 * 1000),
-    httpOnly: true
+  res.status(200).json({
+    status: 'success',
+    message: 'Déconnexion réussie'
   });
-  res.redirect('/auth/login');
 };
 
 exports.changePassword = async (req, res) => {
   try {
-    const { currentPassword, newPassword, confirmPassword } = req.body;
+    const { currentPassword, newPassword } = req.body;
     const user = await User.findById(req.user.id);
 
     if (!(await user.correctPassword(currentPassword))) {
-      return res.status(400).render('auth/change-password', {
-        error: 'Mot de passe actuel incorrect',
-        user: req.user
-      });
-    }
-
-    if (newPassword !== confirmPassword) {
-      return res.status(400).render('auth/change-password', {
-        error: 'Les mots de passe ne correspondent pas',
-        user: req.user
+      return res.status(400).json({
+        status: 'error',
+        message: 'Mot de passe actuel incorrect'
       });
     }
 
@@ -133,23 +111,51 @@ exports.changePassword = async (req, res) => {
     user.mustChangePassword = false;
     await user.save();
 
-    res.render('auth/change-password', {
-      success: 'Mot de passe modifié avec succès',
-      user: req.user
+    res.status(200).json({
+      status: 'success',
+      message: 'Mot de passe modifié avec succès'
     });
   } catch (error) {
     console.error('Change password error:', error);
-    res.status(500).render('auth/change-password', {
-      error: 'Erreur lors du changement de mot de passe',
-      user: req.user
+    res.status(500).json({
+      status: 'error',
+      message: 'Erreur lors du changement de mot de passe'
     });
   }
 };
 
-exports.showLogin = (req, res) => {
-  res.render('auth/login', { layout: false });
-};
+exports.getMe = async (req, res) => {
+  try {
+    let userData;
+    
+    switch(req.user.role) {
+      case 'student':
+        userData = await Student.findOne({ user: req.user.id }).populate('user');
+        break;
+      case 'doctor':
+        userData = await Doctor.findOne({ user: req.user.id }).populate('user');
+        break;
+      case 'service_chief':
+        userData = await ServiceChief.findOne({ user: req.user.id }).populate('user');
+        break;
+      case 'dean':
+        userData = await Dean.findOne({ user: req.user.id }).populate('user');
+        break;
+      default:
+        userData = await User.findById(req.user.id);
+    }
 
-exports.showChangePassword = (req, res) => {
-  res.render('auth/change-password', { user: req.user });
+    res.status(200).json({
+      status: 'success',
+      data: {
+        user: userData
+      }
+    });
+  } catch (error) {
+    console.error('Get me error:', error);
+    res.status(500).json({
+      status: 'error',
+      message: 'Erreur lors de la récupération du profil'
+    });
+  }
 };

@@ -2,18 +2,20 @@ const Student = require('../models/Student');
 const Internship = require('../models/Internship');
 const Application = require('../models/Application');
 const Evaluation = require('../models/Evaluation');
-const Service = require('../models/Service');
-const Establishment = require('../models/Establishment');
+
+// Helper function to get student by user ID
+const getStudentByUserId = async (userId) => {
+  return await Student.findOne({ user: userId });
+};
 
 exports.getDashboard = async (req, res) => {
   try {
-    const student = await Student.findOne({ user: req.user.id })
-      .populate('user');
+    const student = await getStudentByUserId(req.user.id);
     
     if (!student) {
-      return res.status(404).render('error', { 
-        error: 'Profil étudiant non trouvé',
-        user: req.user
+      return res.status(404).json({
+        status: 'error',
+        message: 'Profil étudiant non trouvé'
       });
     }
 
@@ -38,7 +40,6 @@ exports.getDashboard = async (req, res) => {
       total: await Application.countDocuments({ student: student._id })
     };
 
-    // Get recommended internships based on student level
     const recommendedInternships = await Internship.find({
       isActive: true,
       isPublished: true,
@@ -48,36 +49,39 @@ exports.getDashboard = async (req, res) => {
     .populate('establishment')
     .limit(3);
 
-    res.render('student/dashboard', {
-      student,
-      applications,
-      stats,
-      recommendedInternships,
-      title: 'Tableau de Bord Étudiant'
+    res.status(200).json({
+      status: 'success',
+      data: {
+        student,
+        applications,
+        stats,
+        recommendedInternships
+      }
     });
   } catch (error) {
     console.error('Dashboard error:', error);
-    res.status(500).render('error', { 
-      error: 'Erreur lors du chargement du tableau de bord',
-      user: req.user
+    res.status(500).json({
+      status: 'error',
+      message: 'Erreur lors du chargement du tableau de bord'
     });
   }
 };
 
 exports.getProfile = async (req, res) => {
   try {
-    const student = await Student.findOne({ user: req.user.id })
-      .populate('user');
+    const student = await getStudentByUserId(req.user.id);
 
-    res.render('student/profile', {
-      student,
-      title: 'Mon Profil'
+    res.status(200).json({
+      status: 'success',
+      data: {
+        student
+      }
     });
   } catch (error) {
     console.error('Profile error:', error);
-    res.status(500).render('error', { 
-      error: 'Erreur lors du chargement du profil',
-      user: req.user
+    res.status(500).json({
+      status: 'error',
+      message: 'Erreur lors du chargement du profil'
     });
   }
 };
@@ -85,7 +89,7 @@ exports.getProfile = async (req, res) => {
 exports.updateProfile = async (req, res) => {
   try {
     const { firstName, lastName, level, phone } = req.body;
-    const student = await Student.findOne({ user: req.user.id });
+    const student = await getStudentByUserId(req.user.id);
 
     student.firstName = firstName;
     student.lastName = lastName;
@@ -106,19 +110,24 @@ exports.updateProfile = async (req, res) => {
     student.checkProfileCompletion();
     await student.save();
 
-    res.redirect('/student/profile');
+    res.status(200).json({
+      status: 'success',
+      data: {
+        student
+      }
+    });
   } catch (error) {
     console.error('Update profile error:', error);
-    res.status(500).render('error', { 
-      error: 'Erreur lors de la mise à jour du profil',
-      user: req.user
+    res.status(500).json({
+      status: 'error',
+      message: 'Erreur lors de la mise à jour du profil'
     });
   }
 };
 
 exports.getInternships = async (req, res) => {
   try {
-    const { service, establishment, search } = req.query;
+    const { service, establishment, search, page = 1, limit = 10 } = req.query;
     let filter = { 
       isActive: true, 
       isPublished: true,
@@ -138,23 +147,28 @@ exports.getInternships = async (req, res) => {
       .populate('service')
       .populate('establishment')
       .populate('chief')
-      .sort({ createdAt: -1 });
+      .sort({ createdAt: -1 })
+      .limit(limit * 1)
+      .skip((page - 1) * limit);
 
-    const services = await Service.find({ isActive: true });
-    const establishments = await Establishment.find({ isActive: true });
+    const total = await Internship.countDocuments(filter);
 
-    res.render('student/internships', {
-      internships,
-      services,
-      establishments,
-      filters: { service, establishment, search },
-      title: 'Stages Disponibles'
+    res.status(200).json({
+      status: 'success',
+      data: {
+        internships,
+        pagination: {
+          current: page,
+          pages: Math.ceil(total / limit),
+          total
+        }
+      }
     });
   } catch (error) {
     console.error('Internships error:', error);
-    res.status(500).render('error', { 
-      error: 'Erreur lors du chargement des stages',
-      user: req.user
+    res.status(500).json({
+      status: 'error',
+      message: 'Erreur lors du chargement des stages'
     });
   }
 };
@@ -167,43 +181,45 @@ exports.getInternshipDetails = async (req, res) => {
       .populate('chief');
 
     if (!internship) {
-      return res.status(404).render('error', { 
-        error: 'Stage non trouvé',
-        user: req.user
+      return res.status(404).json({
+        status: 'error',
+        message: 'Stage non trouvé'
       });
     }
 
     // Check if student already applied
-    const student = await Student.findOne({ user: req.user.id });
+    const student = await getStudentByUserId(req.user.id);
     const existingApplication = await Application.findOne({
       student: student._id,
       internship: internship._id
     });
 
-    res.render('student/internship-details', {
-      internship,
-      hasApplied: !!existingApplication,
-      title: internship.title
+    res.status(200).json({
+      status: 'success',
+      data: {
+        internship,
+        hasApplied: !!existingApplication
+      }
     });
   } catch (error) {
     console.error('Internship details error:', error);
-    res.status(500).render('error', { 
-      error: 'Erreur lors du chargement du stage',
-      user: req.user
+    res.status(500).json({
+      status: 'error',
+      message: 'Erreur lors du chargement du stage'
     });
   }
 };
 
 exports.applyToInternship = async (req, res) => {
   try {
-    const student = await Student.findOne({ user: req.user.id });
+    const student = await getStudentByUserId(req.user.id);
     const { id } = req.params;
 
     // Check if student profile is completed
     if (!student.profileCompleted) {
       return res.status(400).json({
-        success: false,
-        error: 'Veuillez compléter votre profil avant de postuler'
+        status: 'error',
+        message: 'Veuillez compléter votre profil avant de postuler'
       });
     }
 
@@ -214,20 +230,20 @@ exports.applyToInternship = async (req, res) => {
 
     if (existingApplication) {
       return res.status(400).json({
-        success: false,
-        error: 'Vous avez déjà postulé à ce stage'
+        status: 'error',
+        message: 'Vous avez déjà postulé à ce stage'
       });
     }
 
     const internship = await Internship.findById(id);
     if (!internship || !internship.isActive || internship.availablePlaces <= 0) {
       return res.status(400).json({
-        success: false,
-        error: 'Ce stage n\'est plus disponible'
+        status: 'error',
+        message: 'Ce stage n\'est plus disponible'
       });
     }
 
-    await Application.create({
+    const application = await Application.create({
       student: student._id,
       internship: id,
       status: 'pending'
@@ -235,43 +251,61 @@ exports.applyToInternship = async (req, res) => {
 
     // TODO: Send notification to service chief
 
-    res.json({
-      success: true,
-      message: 'Candidature envoyée avec succès'
+    res.status(201).json({
+      status: 'success',
+      data: {
+        application
+      }
     });
   } catch (error) {
     console.error('Apply error:', error);
     res.status(500).json({
-      success: false,
-      error: 'Erreur lors de la candidature'
+      status: 'error',
+      message: 'Erreur lors de la candidature'
     });
   }
 };
 
 exports.getApplications = async (req, res) => {
   try {
-    const student = await Student.findOne({ user: req.user.id });
-    const applications = await Application.find({ student: student._id })
+    const student = await getStudentByUserId(req.user.id);
+    const { status, page = 1, limit = 10 } = req.query;
+    
+    let filter = { student: student._id };
+    if (status) filter.status = status;
+
+    const applications = await Application.find(filter)
       .populate('internship')
       .populate('processedBy')
-      .sort({ appliedAt: -1 });
+      .sort({ appliedAt: -1 })
+      .limit(limit * 1)
+      .skip((page - 1) * limit);
 
-    res.render('student/applications', {
-      applications,
-      title: 'Mes Candidatures'
+    const total = await Application.countDocuments(filter);
+
+    res.status(200).json({
+      status: 'success',
+      data: {
+        applications,
+        pagination: {
+          current: page,
+          pages: Math.ceil(total / limit),
+          total
+        }
+      }
     });
   } catch (error) {
     console.error('Applications error:', error);
-    res.status(500).render('error', { 
-      error: 'Erreur lors du chargement des candidatures',
-      user: req.user
+    res.status(500).json({
+      status: 'error',
+      message: 'Erreur lors du chargement des candidatures'
     });
   }
 };
 
 exports.cancelApplication = async (req, res) => {
   try {
-    const student = await Student.findOne({ user: req.user.id });
+    const student = await getStudentByUserId(req.user.id);
     const { id } = req.params;
 
     const application = await Application.findOne({
@@ -282,78 +316,47 @@ exports.cancelApplication = async (req, res) => {
 
     if (!application) {
       return res.status(404).json({
-        success: false,
-        error: 'Candidature non trouvée ou ne peut pas être annulée'
+        status: 'error',
+        message: 'Candidature non trouvée ou ne peut pas être annulée'
       });
     }
 
     application.status = 'cancelled';
     await application.save();
 
-    res.json({
-      success: true,
+    res.status(200).json({
+      status: 'success',
       message: 'Candidature annulée avec succès'
     });
   } catch (error) {
     console.error('Cancel application error:', error);
     res.status(500).json({
-      success: false,
-      error: 'Erreur lors de l\'annulation'
+      status: 'error',
+      message: 'Erreur lors de l\'annulation'
     });
   }
 };
 
 exports.getEvaluations = async (req, res) => {
   try {
-    const student = await Student.findOne({ user: req.user.id });
+    const student = await getStudentByUserId(req.user.id);
     const evaluations = await Evaluation.find({ student: student._id })
       .populate('internship')
       .populate('doctor')
       .populate('chief')
       .sort({ submittedAt: -1 });
 
-    res.render('student/evaluations', {
-      evaluations,
-      title: 'Mes Évaluations'
+    res.status(200).json({
+      status: 'success',
+      data: {
+        evaluations
+      }
     });
   } catch (error) {
     console.error('Evaluations error:', error);
-    res.status(500).render('error', { 
-      error: 'Erreur lors du chargement des évaluations',
-      user: req.user
-    });
-  }
-};
-
-exports.downloadCertificate = async (req, res) => {
-  try {
-    const evaluation = await Evaluation.findById(req.params.id)
-      .populate('student')
-      .populate('internship');
-
-    if (!evaluation || !evaluation.certificatePath) {
-      return res.status(404).render('error', {
-        error: 'Attestation non trouvée',
-        user: req.user
-      });
-    }
-
-    // Check if the student owns this evaluation
-    const student = await Student.findOne({ user: req.user.id });
-    if (evaluation.student._id.toString() !== student._id.toString()) {
-      return res.status(403).render('error', {
-        error: 'Accès non autorisé',
-        user: req.user
-      });
-    }
-
-    const filePath = path.join(__dirname, '../public', evaluation.certificatePath);
-    res.download(filePath);
-  } catch (error) {
-    console.error('Download certificate error:', error);
-    res.status(500).render('error', {
-      error: 'Erreur lors du téléchargement',
-      user: req.user
+    res.status(500).json({
+      status: 'error',
+      message: 'Erreur lors du chargement des évaluations'
     });
   }
 };

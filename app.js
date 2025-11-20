@@ -1,7 +1,7 @@
 const express = require('express');
 const mongoose = require('mongoose');
+const cors = require('cors');
 const path = require('path');
-const cookieParser = require('cookie-parser');
 require('dotenv').config();
 
 // Import routes
@@ -11,9 +11,8 @@ const doctorRoutes = require('./routes/doctors');
 const serviceChiefRoutes = require('./routes/service-chiefs');
 const deanRoutes = require('./routes/dean');
 const internshipRoutes = require('./routes/internships');
-const applicationRoutes = require('./routes/applications');
-const evaluationRoutes = require('./routes/evaluations');
 const establishmentRoutes = require('./routes/establishments');
+const serviceRoutes = require('./routes/services');
 
 // Import database connection
 const connectDB = require('./config/database');
@@ -24,49 +23,48 @@ const app = express();
 // Connect to database
 connectDB();
 
+// CORS configuration
+app.use(cors({
+  origin: process.env.FRONTEND_URL || 'http://localhost:3000',
+  credentials: true
+}));
+
 // Middleware
-app.use(express.json());
-app.use(express.urlencoded({ extended: true }));
-app.use(cookieParser());
-app.use(express.static('public'));
+app.use(express.json({ limit: '10mb' }));
+app.use(express.urlencoded({ extended: true, limit: '10mb' }));
+app.use('/uploads', express.static(path.join(__dirname, 'public/uploads')));
 
-// View engine setup
-app.set('view engine', 'ejs');
-app.set('views', path.join(__dirname, 'views'));
-
-// Global variables middleware
+// Request logging middleware
 app.use((req, res, next) => {
-  res.locals.user = req.user || null;
-  res.locals.currentPath = req.path;
+  console.log(`${req.method} ${req.path} - ${new Date().toISOString()}`);
   next();
 });
 
-// Routes
-app.use('/auth', authRoutes);
-app.use('/student', studentRoutes);
-app.use('/doctor', doctorRoutes);
-app.use('/service-chief', serviceChiefRoutes);
-app.use('/dean', deanRoutes);
-app.use('/internships', internshipRoutes);
-app.use('/api/applications', applicationRoutes);
-app.use('/api/evaluations', evaluationRoutes);
-app.use('/api/establishments', establishmentRoutes);
+// API Routes
+app.use('/api/v1/auth', authRoutes);
+app.use('/api/v1/students', studentRoutes);
+app.use('/api/v1/doctors', doctorRoutes);
+app.use('/api/v1/service-chiefs', serviceChiefRoutes);
+app.use('/api/v1/dean', deanRoutes);
+app.use('/api/v1/internships', internshipRoutes);
+app.use('/api/v1/establishments', establishmentRoutes);
+app.use('/api/v1/services', serviceRoutes);
 
-// Home route
-app.get('/', (req, res) => {
-  if (req.cookies.jwt && req.cookies.jwt !== 'loggedout') {
-    // User is logged in, redirect to appropriate dashboard
-    return res.redirect('/auth/login');
-  }
-  res.redirect('/auth/login');
+// Health check route
+app.get('/api/health', (req, res) => {
+  res.status(200).json({
+    status: 'success',
+    message: 'API is running successfully',
+    timestamp: new Date().toISOString(),
+    environment: process.env.NODE_ENV
+  });
 });
 
-// 404 handler
-app.use('*', (req, res) => {
-  res.status(404).render('error', {
-    error: 'Page non trouvée',
-    user: req.user || null,
-    title: 'Page Non Trouvée'
+// 404 handler for API routes
+app.all('*', (req, res) => {
+  res.status(404).json({
+    status: 'error',
+    message: `Route ${req.originalUrl} not found on this server`
   });
 });
 
@@ -74,20 +72,55 @@ app.use('*', (req, res) => {
 app.use((err, req, res, next) => {
   console.error('Global error handler:', err.stack);
   
-  res.status(500).render('error', {
-    error: process.env.NODE_ENV === 'development' ? err.message : 'Une erreur est survenue',
-    user: req.user || null,
-    title: 'Erreur'
+  // Mongoose validation error
+  if (err.name === 'ValidationError') {
+    const errors = Object.values(err.errors).map(el => el.message);
+    return res.status(400).json({
+      status: 'error',
+      message: 'Données invalides',
+      errors
+    });
+  }
+
+  // Mongoose duplicate key error
+  if (err.code === 11000) {
+    const field = Object.keys(err.keyValue)[0];
+    return res.status(400).json({
+      status: 'error',
+      message: `${field} existe déjà`
+    });
+  }
+
+  // JWT errors
+  if (err.name === 'JsonWebTokenError') {
+    return res.status(401).json({
+      status: 'error',
+      message: 'Token invalide'
+    });
+  }
+
+  if (err.name === 'TokenExpiredError') {
+    return res.status(401).json({
+      status: 'error',
+      message: 'Token expiré'
+    });
+  }
+
+  // Default error
+  res.status(err.statusCode || 500).json({
+    status: 'error',
+    message: err.message || 'Une erreur est survenue sur le serveur'
   });
 });
 
 // Start server
-const PORT = process.env.PORT || 3000;
+const PORT = process.env.PORT || 5000;
 
 app.listen(PORT, () => {
-  console.log(`Serveur démarré sur le port ${PORT}`);
-  console.log(`Environnement: ${process.env.NODE_ENV}`);
-  console.log(`URL: http://localhost:${PORT}`);
+  console.log(`API Server started on port ${PORT}`);
+  console.log(`Environment: ${process.env.NODE_ENV}`);
+  console.log(`API URL: http://localhost:${PORT}/api/v1`);
+  console.log(`❤️ Health check: http://localhost:${PORT}/api/health`);
 });
 
 module.exports = app;

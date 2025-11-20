@@ -11,16 +11,16 @@ router.use(restrictTo('service_chief'));
 router.get('/dashboard', serviceChiefController.getDashboard);
 
 // Internships
-router.get('/internships', serviceChiefController.getInternships);
-router.get('/internships/create', serviceChiefController.createInternship);
-router.post('/internships', serviceChiefController.storeInternship);
+router.route('/internships')
+  .get(serviceChiefController.getInternships)
+  .post(serviceChiefController.storeInternship);
 
 // Applications
 router.get('/applications', serviceChiefController.getApplications);
-router.post('/applications/:id/status', serviceChiefController.updateApplicationStatus);
+router.patch('/applications/:id/status', serviceChiefController.updateApplicationStatus);
 
 // Evaluations
 router.get('/evaluations', serviceChiefController.getEvaluations);
-router.post('/evaluations/:id/validate', serviceChiefController.validateEvaluation);
+router.patch('/evaluations/:id/validate', serviceChiefController.validateEvaluation);
 
 module.exports = router;
