@@ -1,0 +1,29 @@
+{
+  "name": "stage_medical",
+  "version": "1.0.0",
+  "description": "Système de gestion des stages médicaux",
+  "main": "app.js",
+  "scripts": {
+    "start": "node app.js",
+    "dev": "nodemon app.js",
+    "test": "echo \"Error: no test specified\" && exit 1"
+  },
+  "dependencies": {
+    "express": "^4.18.0",
+    "mongoose": "^7.0.0",
+    "bcryptjs": "^2.4.3",
+    "jsonwebtoken": "^9.0.0",
+    "dotenv": "^16.0.0",
+    "multer": "2.0.2",
+    "express-validator": "^7.0.0",
+    "ejs": "^3.1.0",
+    "nodemailer": "^6.9.0",
+    "cookie-parser": "^1.4.6"
+  },
+  "devDependencies": {
+    "nodemon": "^2.0.0"
+  },
+  "keywords": ["stage", "management", "express", "mongodb"],
+  "author": "Boudaoud Sid Ahmed",
+  "license": "MIT"
+}
